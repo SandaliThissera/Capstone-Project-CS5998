@@ -28,11 +28,28 @@ def preprocess(img, size=512):
 
 
 def ben_graham(img, sigma_frac=1 / 30):
-    """Local contrast enhancement (subtract a blurred copy), border set to neutral grey."""
-    h, w = img.shape[:2]
-    blur = cv2.GaussianBlur(img, (0, 0), max(w * sigma_frac, 1))
-    out = cv2.addWeighted(img, 4, blur, -4, 128)
-    mask = np.zeros((h, w), np.uint8)
-    cv2.circle(mask, (w // 2, h // 2), int(min(h, w) * 0.48), 255, -1)
-    out[mask == 0] = 128
+    """Local contrast enhancement: 4*(img - blur) + 128, computed over the retina only.
+
+    Dark pixels count as retina only if they are enclosed by it. Dark areas that
+    touch the image border (padding, corners) are background and end up neutral grey,
+    and the blur never averages them in.
+    """
+    w = img.shape[1]
+    sigma = max(w * sigma_frac, 1)
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+    inv = (gray <= 10).astype(np.uint8)
+    _, lab = cv2.connectedComponents(inv, connectivity=4)
+    border = np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
+    holes = inv.astype(bool) & ~np.isin(lab, border)
+    valid = ((gray > 10) | holes).astype(np.uint8)
+    valid = cv2.erode(valid, np.ones((9, 9), np.uint8))
+
+    vf = valid.astype(np.float32)
+    imgf = img.astype(np.float32)
+    num = cv2.GaussianBlur(imgf * vf[..., None], (0, 0), sigma)
+    den = cv2.GaussianBlur(vf, (0, 0), sigma)[..., None]
+    blur = num / np.maximum(den, 1e-3)
+    out = np.clip(4 * (imgf - blur) + 128, 0, 255).astype(np.uint8)
+    out[valid == 0] = 128
     return out
