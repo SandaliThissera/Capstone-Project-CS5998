@@ -1,0 +1,24 @@
+{
+  "n_images": 3662,
+  "class_counts": {
+    "0": 1805,
+    "1": 370,
+    "2": 999,
+    "3": 193,
+    "4": 295
+  },
+  "size_sample": {
+    "width": {
+      "min": 640,
+      "median": 2144,
+      "max": 4288
+    },
+    "height": {
+      "min": 480,
+      "median": 1536,
+      "max": 2848
+    }
+  },
+  "duplicates": 128,
+  "conflicting_label_images": 62
+}
