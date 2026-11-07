@@ -54,7 +54,6 @@ build/
 *.tmp
 *.bak
 /data
-data/
 *.pt
 *.pth
 *.ckpt
