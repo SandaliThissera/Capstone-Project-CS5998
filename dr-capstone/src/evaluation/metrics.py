@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.metrics import cohen_kappa_score, f1_score, recall_score
+from sklearn.metrics import cohen_kappa_score, f1_score, recall_score, roc_auc_score
 
 
 def compute_metrics(y_true, y_pred, num_classes=5):
@@ -12,3 +12,18 @@ def compute_metrics(y_true, y_pred, num_classes=5):
         "recall_per_class": recall_score(y_true, y_pred, average=None, labels=labels,
                                          zero_division=0).round(3).tolist(),
     }
+
+
+def screening_metrics(y_true, probs):
+    """Binary views of the 5-grade problem: any DR (grade >= 1) and referable DR (grade >= 2)."""
+    y_true, probs = np.asarray(y_true), np.asarray(probs)
+    pred = probs.argmax(1)
+    out = {}
+    for name, k in (("anydr", 1), ("referable", 2)):
+        pos, pred_pos = y_true >= k, pred >= k
+        tp, fn = (pos & pred_pos).sum(), (pos & ~pred_pos).sum()
+        tn, fp = (~pos & ~pred_pos).sum(), (~pos & pred_pos).sum()
+        out[f"{name}_sens"] = float(tp / max(tp + fn, 1))
+        out[f"{name}_spec"] = float(tn / max(tn + fp, 1))
+        out[f"{name}_auc"] = float(roc_auc_score(pos, probs[:, k:].sum(1)))
+    return out
