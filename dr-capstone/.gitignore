@@ -54,8 +54,14 @@ build/
 *.tmp
 *.bak
 /data
+data/
 *.pt
 *.pth
 *.ckpt
 .venv/
 wandb/
+__pycache__/
+.ipynb_checkpoints/
+*.egg-info/
+.ipynb_checkpoints/
+kaggle.json
