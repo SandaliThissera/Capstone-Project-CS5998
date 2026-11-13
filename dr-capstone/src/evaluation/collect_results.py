@@ -25,7 +25,9 @@ def main():
             if cfg:
                 row.update(arch=cfg["model"]["arch"], image_size=cfg["data"]["image_size"],
                            enhance=cfg["data"]["enhance"], class_weights=cfg["train"]["class_weights"],
-                           batch=cfg["train"]["batch_size"], seed=cfg["seed"])
+                           batch=cfg["train"]["batch_size"], seed=cfg["seed"],
+                           head=cfg["model"].get("head", "classification"),
+                           cw_power=cfg["train"].get("class_weight_power", 1.0))
             mt = json.loads(mp.read_text())
             for i, r in enumerate(mt.pop("recall_per_class", [])):
                 mt[f"recall_{i}"] = r
@@ -35,7 +37,7 @@ def main():
     df = pd.DataFrame(rows)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(a.out, index=False)
-    show = [c for c in ("run", "ckpt", "image_size", "enhance", "class_weights", "qwk", "acc", "macro_f1",
+    show = [c for c in ("run", "ckpt", "image_size", "enhance", "class_weights", "cw_power", "head", "qwk", "acc", "macro_f1",
                         "referable_sens", "referable_spec", "referable_auc",
                         "recall_0", "recall_1", "recall_2", "recall_3", "recall_4") if c in df.columns]
     print(df[show].round(3).to_string(index=False))

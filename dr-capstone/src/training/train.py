@@ -2,33 +2,18 @@ import argparse, csv, json, random, time
 from pathlib import Path
 
 import numpy as np
-import timm
 import torch
 import yaml
-from torch import nn
 from torch.utils.data import DataLoader
 
 from src.data.dataset import DRDataset, build_transforms, class_weights
 from src.evaluation.metrics import compute_metrics
+from src.training.engine import build_criterion, build_model, decode, predict
 
 
 def set_seed(seed):
     random.seed(seed); np.random.seed(seed)
     torch.manual_seed(seed); torch.cuda.manual_seed_all(seed)
-
-
-@torch.no_grad()
-def evaluate(model, loader, device, criterion):
-    model.eval()
-    ys, ps, total, n = [], [], 0.0, 0
-    for x, y in loader:
-        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
-        with torch.autocast(device_type=device.type, enabled=device.type == "cuda"):
-            logits = model(x)
-        total += criterion(logits.float(), y).item() * len(y)
-        n += len(y)
-        ys.append(y.cpu().numpy()); ps.append(logits.argmax(1).cpu().numpy())
-    return total / n, np.concatenate(ys), np.concatenate(ps)
 
 
 def main():
@@ -54,9 +39,11 @@ def main():
     va_dl = DataLoader(va_ds, batch_size=t["batch_size"] * 2, shuffle=False,
                        num_workers=t["num_workers"], pin_memory=True)
 
-    model = timm.create_model(m["arch"], pretrained=m["pretrained"], num_classes=m["num_classes"]).to(device)
-    weights = class_weights(tr_ds.df, m["num_classes"]).to(device) if t["class_weights"] else None
-    criterion = nn.CrossEntropyLoss(weight=weights)
+    model = build_model(cfg).to(device)
+    cw = None
+    if t["class_weights"]:
+        cw = class_weights(tr_ds.df, m["num_classes"], t.get("class_weight_power", 1.0)).to(device)
+    criterion = build_criterion(cfg, cw).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=t["lr"], weight_decay=t["weight_decay"])
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=t["epochs"])
     scaler = torch.amp.GradScaler("cuda", enabled=device.type == "cuda" and t["amp"])
@@ -87,8 +74,8 @@ def main():
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast(device_type=device.type, enabled=scaler.is_enabled()):
-                logits = model(x)
-            loss = criterion(logits.float(), y)
+                out = model(x)
+            loss = criterion(out.float(), y)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -96,8 +83,8 @@ def main():
         lr = optimizer.param_groups[0]["lr"]
         scheduler.step()
 
-        val_loss, yt, yp = evaluate(model, va_dl, device, criterion)
-        mt = compute_metrics(yt, yp, m["num_classes"])
+        yt, outs, val_loss = predict(model, va_dl, device, criterion)
+        mt = compute_metrics(yt, decode(cfg, outs), m["num_classes"])
         secs = time.time() - t0
 
         if mt["qwk"] > best_qwk:

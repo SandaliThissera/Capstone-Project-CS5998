@@ -50,7 +50,8 @@ class DRDataset(Dataset):
         return img, int(row.diagnosis)
 
 
-def class_weights(df, num_classes=5):
-    """Inverse-frequency weights, normalised so a balanced set gives 1.0 per class."""
+def class_weights(df, num_classes=5, power=1.0):
+    """Inverse-frequency weights raised to `power` (1 = full, 0.5 = square root, 0 = none)."""
     counts = df["diagnosis"].value_counts().reindex(range(num_classes)).fillna(0).values
-    return torch.tensor(len(df) / (num_classes * counts), dtype=torch.float32)
+    w = len(df) / (num_classes * counts)
+    return torch.tensor(w ** power, dtype=torch.float32)

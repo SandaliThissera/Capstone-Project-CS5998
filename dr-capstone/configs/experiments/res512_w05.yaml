@@ -1,0 +1,22 @@
+name: res512_w05
+seed: 42
+data:
+  splits: configs/splits_aptos.csv
+  cache_dir: /content/cache_512
+  image_size: 512
+  enhance: false
+model:
+  arch: efficientnet_b0
+  pretrained: true
+  num_classes: 5
+train:
+  epochs: 15
+  batch_size: 16
+  lr: 0.0003
+  weight_decay: 0.0001
+  class_weights: true
+  num_workers: 2
+  amp: true
+  class_weight_power: 0.5
+output:
+  dir: /content/drive/MyDrive/dr-capstone/runs

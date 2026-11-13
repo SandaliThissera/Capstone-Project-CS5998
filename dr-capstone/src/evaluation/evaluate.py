@@ -4,9 +4,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import timm
 import torch
 import yaml
 from sklearn.metrics import confusion_matrix
@@ -14,18 +12,7 @@ from torch.utils.data import DataLoader
 
 from src.data.dataset import DRDataset, build_transforms
 from src.evaluation.metrics import compute_metrics, screening_metrics
-
-
-@torch.no_grad()
-def predict_probs(model, loader, device):
-    model.eval()
-    ys, ps = [], []
-    for x, y in loader:
-        with torch.autocast(device_type=device.type, enabled=device.type == "cuda"):
-            logits = model(x.to(device))
-        ys.append(y.numpy())
-        ps.append(torch.softmax(logits.float(), dim=1).cpu().numpy())
-    return np.concatenate(ys), np.concatenate(ps)
+from src.training.engine import build_model, decode, get_scores, is_regression, predict, softmax_np
 
 
 def main():
@@ -43,7 +30,7 @@ def main():
     d, m = cfg["data"], cfg["model"]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = timm.create_model(m["arch"], pretrained=False, num_classes=m["num_classes"]).to(device)
+    model = build_model(cfg, pretrained=False).to(device)
     if a.ckpt == "last":
         state = torch.load(run_dir / "last.pt", map_location=device)["model"]
     else:
@@ -53,18 +40,22 @@ def main():
 
     ds = DRDataset(d["splits"], a.split, d["cache_dir"], build_transforms(False, d["image_size"]), d["enhance"])
     dl = DataLoader(ds, batch_size=32, shuffle=False, num_workers=2)
-    y, probs = predict_probs(model, dl, device)
-    pred = probs.argmax(1)
+    y, out, _ = predict(model, dl, device)
+    pred = decode(cfg, out)
 
     labels = list(range(m["num_classes"]))
     mt = compute_metrics(y, pred, m["num_classes"])
-    mt.update(screening_metrics(y, probs))
+    mt.update(screening_metrics(y, pred, get_scores(cfg, out)))
     print(json.dumps(mt, indent=2))
     (run_dir / f"metrics_{a.split}{tag}.json").write_text(json.dumps(mt, indent=2))
 
-    out_df = pd.DataFrame(probs, columns=[f"p{i}" for i in labels])
+    if is_regression(cfg):
+        out_df = pd.DataFrame({"score": out[:, 0]})
+    else:
+        out_df = pd.DataFrame(softmax_np(out), columns=[f"p{i}" for i in labels])
     out_df.insert(0, "id_code", ds.df["id_code"].values)
     out_df.insert(1, "y_true", y)
+    out_df.insert(2, "y_pred", pred)
     out_df.to_csv(run_dir / f"probs_{a.split}{tag}.csv", index=False)
 
     cm = confusion_matrix(y, pred, labels=labels)
@@ -79,10 +70,10 @@ def main():
     ax.set_xlabel("Predicted grade"); ax.set_ylabel("True grade")
     ax.set_title(f"{cfg['name']} - {a.split}{tag} (QWK {mt['qwk']:.3f})")
     plt.tight_layout()
-    out = Path(a.fig_out) if a.fig_out else run_dir / f"confusion_{a.split}{tag}.png"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(out, dpi=150)
-    print("saved", out)
+    out_path = Path(a.fig_out) if a.fig_out else run_dir / f"confusion_{a.split}{tag}.png"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(out_path, dpi=150)
+    print("saved", out_path)
 
 
 if __name__ == "__main__":
