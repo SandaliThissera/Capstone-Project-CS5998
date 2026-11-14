@@ -19,3 +19,26 @@ Findings:
 - Enhancement (Ben Graham) and 384 px were tried with one seed each and not pursued; the ordinal regression head scored lower (QWK 0.892) with one seed.
 
 Decision (2026-11-13): primary model is EfficientNet-B0, 512 px, no class weights. weights^0.5 is reported as the tied comparison.
+
+## Final model and test protocol (declared 2026-11-14, before any test-split evaluation)
+
+Validation, final epoch, 3-seed ensembles (average of softmax probabilities):
+
+| Model | QWK | Accuracy | Macro-F1 | Referable AUC | False alarms at 95% sens |
+|---|---|---|---|---|---|
+| 512 px, no class weights | 0.928 | 0.897 | 0.789 | 0.994 | 12 |
+| 512 px, weights^0.5 | 0.934 | 0.895 | 0.794 | 0.992 | 20 |
+
+Both ensembles beat their best single member on QWK, accuracy and macro-F1. They tie on those metrics; the no-class-weight ensemble has the better referable-DR trade-off (higher AUC, fewer false alarms at equal sensitivity).
+
+Final model: average of the softmax probabilities of the three 512 px, no-class-weight EfficientNet-B0 runs (seeds 42, 43, 44).
+
+Referable-DR operating point: target sensitivity >= 0.95, with the cut-off on P(grade >= 2) chosen on the validation split and then applied unchanged to test.
+
+The test split is evaluated once, for these models only:
+- the final model (3-seed ensemble)
+- the weights^0.5 3-seed ensemble (tied comparison)
+- the 256 px baseline (EfficientNet-B0, full class weights, seed 42)
+- the classical baseline (gradient boosting on handcrafted features)
+
+No model, setting or cut-off will be changed after seeing test results; results are reported as obtained.
