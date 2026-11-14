@@ -23,6 +23,8 @@ def main():
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--with-test", action="store_true",
+                    help="also evaluate on the test split (final reporting only)")
     a = ap.parse_args()
 
     out = Path(a.out_dir)
@@ -54,6 +56,15 @@ def main():
     (out / "metrics_val.json").write_text(json.dumps(mt, indent=2))
     pd.DataFrame({"id_code": va["id_code"].values, "y_true": va["diagnosis"].values,
                   "y_pred": pred}).to_csv(out / "preds_val.csv", index=False)
+    if a.with_test:
+        te = data[data.split == "test"]
+        pred_te = clf.predict(te[cols])
+        mt_te = compute_metrics(te["diagnosis"].values, pred_te)
+        print("TEST split:")
+        print(json.dumps(mt_te, indent=2))
+        (out / "metrics_test.json").write_text(json.dumps(mt_te, indent=2))
+        pd.DataFrame({"id_code": te["id_code"].values, "y_true": te["diagnosis"].values,
+                      "y_pred": pred_te}).to_csv(out / "preds_test.csv", index=False)
     print("features:", len(cols), "| saved to", out)
 
 
