@@ -1,0 +1,10 @@
+# CPU-only demo environment (laptop). Install torch first:  pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+timm
+numpy
+opencv-python-headless
+fastapi
+uvicorn[standard]
+python-multipart
+streamlit
+requests
+pandas
